@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import AppIcon from "@/components/AppIcon";
+import Clock from "@/components/Clock";
 
 const DEFAULT_DOCK = ["Finder", "Safari", "Mail", "Messages", "Calendar"];
 const DEFAULT_LIBRARY = [
@@ -264,6 +265,8 @@ export default function Home() {
             opacity: 0.025,
           }}
         />
+
+        <Clock />
 
         <div
           style={{
