@@ -1,26 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
 import Clock from "@/components/Clock";
+import Orb from "@/components/Orb";
 
-const DEFAULT_DOCK = ["Finder", "Safari", "Mail", "Messages", "Calendar"];
-const DEFAULT_LIBRARY = [
-  "Finder",
-  "Safari",
-  "Mail",
-  "Messages",
-  "Calendar",
-  "Finder",
-  "Safari",
-  "Mail",
-  "Messages",
-  "Calendar",
-  "Finder",
-  "Safari",
-  "Mail",
-  "Messages",
-  "Calendar",
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type DragSource = "dock" | "library";
+
+interface DragState {
+  name: string;
+  from: DragSource;
+  index: number;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const DOCK_MAX_APPS = 5;
+const STORAGE_KEY_DOCK = "dockApps";
+const STORAGE_KEY_LIBRARY = "libraryApps";
+
+const DEFAULT_DOCK: string[] = [
   "Finder",
   "Safari",
   "Mail",
@@ -28,20 +29,17 @@ const DEFAULT_LIBRARY = [
   "Calendar",
 ];
 
-const GLASS_CSS = `
-  @keyframes shimmer {
-    0% { background-position: -200% center; }
-    100% { background-position: 200% center; }
-  }
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-6px); }
-  }
-  @keyframes bgDrift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
+const DEFAULT_LIBRARY: string[] = Array.from({ length: 4 }, () => [
+  "Finder",
+  "Safari",
+  "Mail",
+  "Messages",
+  "Calendar",
+]).flat();
+
+// ─── Styles ──────────────────────────────────────────────────────────────────
+
+const ANIMATIONS = `
   @keyframes orb1 {
     0%, 100% { transform: translate(0px, 0px) scale(1); }
     33% { transform: translate(80px, -60px) scale(1.1); }
@@ -56,6 +54,7 @@ const GLASS_CSS = `
     0%, 100% { transform: translate(0px, 0px) scale(1); }
     50% { transform: translate(30px, 60px) scale(1.08); }
   }
+
   .dock-glass {
     background: rgba(255, 255, 255, 0.07);
     backdrop-filter: blur(40px) saturate(180%) brightness(1.1);
@@ -92,95 +91,132 @@ const GLASS_CSS = `
       inset 0 1px 0 rgba(255,255,255,0.15),
       inset 0 -1px 0 rgba(0,0,0,0.1);
   }
-  .drop-zone-active {
-    background: rgba(255,255,255,0.12) !important;
-    border: 1.5px dashed rgba(255,255,255,0.5) !important;
-    box-shadow: 0 0 0 3px rgba(255,255,255,0.1), inset 0 0 20px rgba(255,255,255,0.06) !important;
-  }
 `;
+
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
+function readStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorage(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Quota exceeded or private browsing — silently ignore
+  }
+}
+
+// ─── Reorder helper ───────────────────────────────────────────────────────────
+
+function reorder<T>(list: T[], from: number, to: number): T[] {
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Home() {
   const [dockApps, setDockApps] = useState<string[]>(DEFAULT_DOCK);
   const [libraryApps, setLibraryApps] = useState<string[]>(DEFAULT_LIBRARY);
   const [mounted, setMounted] = useState(false);
-  const [dragging, setDragging] = useState<{
-    name: string;
-    from: "dock" | "library";
-    index: number;
-  } | null>(null);
+
+  const [dragging, setDragging] = useState<DragState | null>(null);
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
 
+  // Hydrate from localStorage once on mount
   useEffect(() => {
-    try {
-      const savedDock = localStorage.getItem("dockApps");
-      const savedLibrary = localStorage.getItem("libraryApps");
-      if (savedDock) setDockApps(JSON.parse(savedDock));
-      if (savedLibrary) setLibraryApps(JSON.parse(savedLibrary));
-    } catch {}
+    setDockApps(readStorage(STORAGE_KEY_DOCK, DEFAULT_DOCK));
+    setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, DEFAULT_LIBRARY));
     setMounted(true);
   }, []);
 
+  // Persist dock
   useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("dockApps", JSON.stringify(dockApps));
+    if (mounted) writeStorage(STORAGE_KEY_DOCK, dockApps);
   }, [dockApps, mounted]);
 
+  // Persist library
   useEffect(() => {
-    if (!mounted) return;
-    localStorage.setItem("libraryApps", JSON.stringify(libraryApps));
+    if (mounted) writeStorage(STORAGE_KEY_LIBRARY, libraryApps);
   }, [libraryApps, mounted]);
 
-  function handleDragStart(
-    name: string,
-    from: "dock" | "library",
-    index: number,
-  ) {
-    setDragging({ name, from, index });
-  }
+  // ── Drag handlers ────────────────────────────────────────────────────────
 
-  function handleDragEnd() {
+  const handleDragStart = useCallback(
+    (name: string, from: DragSource, index: number) => {
+      setDragging({ name, from, index });
+    },
+    [],
+  );
+
+  const handleDragEnd = useCallback(() => {
     setDragging(null);
     setDockDragOver(null);
     setLibraryDragOver(null);
-  }
+  }, []);
 
-  function handleDropOnDock(targetIndex: number) {
-    if (!dragging) return;
-    const newDock = [...dockApps];
-    if (dragging.from === "dock") {
-      newDock.splice(dragging.index, 1);
-      newDock.splice(targetIndex, 0, dragging.name);
-      setDockApps(newDock);
-    } else {
-      if (dockApps.length >= 5) return;
-      const newLibrary = [...libraryApps];
-      newLibrary.splice(dragging.index, 1);
-      newDock.splice(targetIndex, 0, dragging.name);
-      setDockApps(newDock);
-      setLibraryApps(newLibrary);
-    }
-  }
+  const handleDropOnDock = useCallback(
+    (targetIndex: number) => {
+      if (!dragging) return;
 
-  function handleDropOnLibrary(targetIndex: number) {
-    if (!dragging) return;
-    const newLibrary = [...libraryApps];
-    if (dragging.from === "library") {
-      newLibrary.splice(dragging.index, 1);
-      newLibrary.splice(targetIndex, 0, dragging.name);
-      setLibraryApps(newLibrary);
-    } else {
-      const newDock = [...dockApps];
-      newDock.splice(dragging.index, 1);
-      newLibrary.splice(targetIndex, 0, dragging.name);
-      setDockApps(newDock);
-      setLibraryApps(newLibrary);
-    }
-  }
+      if (dragging.from === "dock") {
+        setDockApps((prev) => reorder(prev, dragging.index, targetIndex));
+      } else {
+        if (dockApps.length >= DOCK_MAX_APPS) return;
+        setLibraryApps((prev) => {
+          const next = [...prev];
+          next.splice(dragging.index, 1);
+          return next;
+        });
+        setDockApps((prev) => {
+          const next = [...prev];
+          next.splice(targetIndex, 0, dragging.name);
+          return next;
+        });
+      }
+    },
+    [dragging, dockApps.length],
+  );
+
+  const handleDropOnLibrary = useCallback(
+    (targetIndex: number) => {
+      if (!dragging) return;
+
+      if (dragging.from === "library") {
+        setLibraryApps((prev) => reorder(prev, dragging.index, targetIndex));
+      } else {
+        setDockApps((prev) => {
+          const next = [...prev];
+          next.splice(dragging.index, 1);
+          return next;
+        });
+        setLibraryApps((prev) => {
+          const next = [...prev];
+          next.splice(targetIndex, 0, dragging.name);
+          return next;
+        });
+      }
+    },
+    [dragging],
+  );
+
+  // ── Render ───────────────────────────────────────────────────────────────
+
+  const dockDropPlaceholderVisible =
+    dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
 
   return (
     <>
-      <style>{GLASS_CSS}</style>
+      <style>{ANIMATIONS}</style>
 
       <div
         style={{
@@ -190,7 +226,9 @@ export default function Home() {
           overflowX: "hidden",
         }}
       >
+        {/* ── Ambient orbs ─────────────────────────────────────────────── */}
         <div
+          aria-hidden="true"
           style={{
             position: "fixed",
             inset: 0,
@@ -199,48 +237,28 @@ export default function Home() {
             overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              position: "absolute",
-              width: "55vw",
-              height: "55vw",
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(56, 130, 246, 0.55) 0%, rgba(56, 130, 246, 0) 70%)",
-              top: "5%",
-              left: "10%",
-              animation: "orb1 18s ease-in-out infinite",
-              filter: "blur(2px)",
-            }}
+          <Orb
+            color="rgba(56, 130, 246, 0.55)"
+            size="55vw"
+            top="5%"
+            left="10%"
+            animation="orb1 18s ease-in-out infinite"
           />
-          <div
-            style={{
-              position: "absolute",
-              width: "50vw",
-              height: "50vw",
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(139, 92, 246, 0.45) 0%, rgba(139, 92, 246, 0) 70%)",
-              top: "20%",
-              right: "5%",
-              animation: "orb2 22s ease-in-out infinite",
-              filter: "blur(2px)",
-            }}
+          <Orb
+            color="rgba(139, 92, 246, 0.45)"
+            size="50vw"
+            top="20%"
+            right="5%"
+            animation="orb2 22s ease-in-out infinite"
           />
-          <div
-            style={{
-              position: "absolute",
-              width: "35vw",
-              height: "35vw",
-              borderRadius: "50%",
-              background:
-                "radial-gradient(circle, rgba(6, 182, 212, 0.35) 0%, rgba(6, 182, 212, 0) 70%)",
-              bottom: "30%",
-              left: "35%",
-              animation: "orb3 15s ease-in-out infinite",
-              filter: "blur(2px)",
-            }}
+          <Orb
+            color="rgba(6, 182, 212, 0.35)"
+            size="35vw"
+            bottom="30%"
+            left="35%"
+            animation="orb3 15s ease-in-out infinite"
           />
+          {/* Dark vignette */}
           <div
             style={{
               position: "absolute",
@@ -255,7 +273,9 @@ export default function Home() {
           />
         </div>
 
+        {/* ── Film-grain noise overlay ───────────────────────────────────── */}
         <div
+          aria-hidden="true"
           style={{
             position: "fixed",
             inset: 0,
@@ -268,6 +288,7 @@ export default function Home() {
 
         <Clock />
 
+        {/* ── Dock ─────────────────────────────────────────────────────── */}
         <div
           style={{
             height: "100vh",
@@ -280,7 +301,6 @@ export default function Home() {
             paddingBottom: "40px",
           }}
         >
-          {/* Dock container */}
           <div
             style={{ width: "80%", position: "relative", minHeight: "120px" }}
           >
@@ -300,8 +320,20 @@ export default function Home() {
               {dockApps.map((app, i) => (
                 <div
                   key={`dock-${i}`}
+                  draggable
+                  onDragStart={() => handleDragStart(app, "dock", i)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDockDragOver(i);
+                  }}
+                  onDragLeave={() => setDockDragOver(null)}
+                  onDrop={() => {
+                    handleDropOnDock(i);
+                    setDockDragOver(null);
+                  }}
                   style={{
-                    width: `calc(100% / 5 - 24px)`,
+                    width: `calc(100% / ${DOCK_MAX_APPS} - 24px)`,
                     opacity:
                       dragging?.from === "dock" && dragging.index === i
                         ? 0.25
@@ -316,27 +348,17 @@ export default function Home() {
                       "opacity 0.15s ease, outline 0.08s ease, transform 0.15s ease",
                     transform: dockDragOver === i ? "scale(1.04)" : "scale(1)",
                   }}
-                  draggable
-                  onDragStart={() => handleDragStart(app, "dock", i)}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDockDragOver(i);
-                  }}
-                  onDragLeave={() => setDockDragOver(null)}
-                  onDrop={() => {
-                    handleDropOnDock(i);
-                    setDockDragOver(null);
-                  }}
                 >
-                  <AppIcon name={app} isInDock={true} />
+                  <AppIcon name={app} isInDock />
                 </div>
               ))}
 
-              {dockApps.length < 5 && dragging?.from === "library" && (
+              {/* Empty slot shown when dragging from library */}
+              {dockDropPlaceholderVisible && (
                 <div
+                  aria-hidden="true"
                   style={{
-                    width: `calc(100% / 5 - 24px)`,
+                    width: `calc(100% / ${DOCK_MAX_APPS} - 24px)`,
                     aspectRatio: "16/9",
                     borderRadius: "18px",
                     border: "1.5px dashed rgba(255,255,255,0.25)",
@@ -360,8 +382,9 @@ export default function Home() {
               )}
             </div>
 
-            {/* Dock reflection — liquid glass floor reflection */}
+            {/* Floor reflection */}
             <div
+              aria-hidden="true"
               style={{
                 position: "absolute",
                 top: "calc(100% + 8px)",
@@ -380,7 +403,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ——— APP LIBRARY ——— */}
+        {/* ── App Library ──────────────────────────────────────────────── */}
         <div
           style={{
             display: "flex",
@@ -400,7 +423,9 @@ export default function Home() {
                 overflow: "hidden",
               }}
             >
+              {/* Inner gradient sheen */}
               <div
+                aria-hidden="true"
                 style={{
                   position: "absolute",
                   inset: 0,
@@ -414,7 +439,7 @@ export default function Home() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(5, 1fr)",
+                  gridTemplateColumns: `repeat(${DOCK_MAX_APPS}, 1fr)`,
                   gap: "28px",
                   position: "relative",
                   zIndex: 1,
