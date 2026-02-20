@@ -63,7 +63,7 @@ export default function AppIcon({
         }}
       >
         <Image
-          src={image ?? "/unknown.png"}
+          src={image ?? `/icons/unknown.png`}
           alt={`${name} icon`}
           fill
           draggable={false}

@@ -30,11 +30,26 @@ interface DragState {
 // ─── App definitions ─────────────────────────────────────────────────────────
 
 const DEFAULT_DOCK: AppEntry[] = [
-  { name: "Youtube", link: "https://www.youtube.com" },
-  { name: "Safari", link: "https://www.apple.com" },
-  { name: "Mail", link: "https://www.icloud.com/mail" },
-  { name: "Messages", link: "https://messages.google.com/web" },
-  { name: "Calendar", link: "https://www.icloud.com/calendar" },
+  {
+    name: "Youtube",
+    link: "https://www.youtube.com",
+  },
+  {
+    name: "Netflix",
+    link: "https://www.netflix.com",
+  },
+  {
+    name: "Disney+",
+    link: "https://www.disneyplus.com",
+  },
+  {
+    name: "Kayo",
+    link: "https://www.kayosports.com.au",
+  },
+  {
+    name: "Spotify",
+    link: "https://www.spotify.com",
+  },
 ];
 
 const DEFAULT_LIBRARY: AppEntry[] = [
@@ -142,6 +157,10 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
   const [item] = next.splice(from, 1);
   next.splice(to, 0, item);
   return next;
+}
+
+function getIconPath(name: string): string {
+  return `/icons/${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.png`;
 }
 
 // ─── Page ────────────────────────────────────────────────────────────────────
@@ -448,6 +467,7 @@ export default function Home() {
                   <AppIcon
                     name={entry.name}
                     link={entry.link}
+                    image={getIconPath(entry.name)}
                     isInDock
                     // FIX: was incorrectly checking "library" for dock items
                     focused={focus.area === "dock" && focus.index === i}
@@ -580,7 +600,7 @@ export default function Home() {
                     <AppIcon
                       name={entry.name}
                       link={entry.link}
-                      // FIX: was incorrectly checking "dock" for library items
+                      image={getIconPath(entry.name)}
                       focused={focus.area === "library" && focus.index === i}
                       onLaunch={handleLaunch}
                     />
