@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useRef, useState, useCallback } from "react";
-import type { LaunchOrigin } from "@/components/AppWindow";
 
 interface AppIconProps {
   name: string;

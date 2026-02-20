@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
-import { type LaunchOrigin } from "@/components/AppWindow";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
 
