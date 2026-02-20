@@ -80,7 +80,7 @@ export default function Clock() {
         <div style={CLOCK_STYLES.sheen} aria-hidden="true" />
         <div style={CLOCK_STYLES.rimHighlight} aria-hidden="true" />
         <span style={CLOCK_STYLES.timeText}>
-          {time.toLocaleTimeString(LOCALE, TIME_FORMAT_OPTIONS)}
+          {time.toLocaleTimeString(LOCALE, TIME_FORMAT_OPTIONS).toUpperCase()}
         </span>
       </div>
     </div>
