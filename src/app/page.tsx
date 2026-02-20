@@ -54,15 +54,9 @@ const DEFAULT_DOCK: AppEntry[] = [
 
 const DEFAULT_LIBRARY: AppEntry[] = [
   { name: "Photos", link: "https://www.icloud.com/photos" },
-  { name: "Music", link: "https://music.apple.com" },
   { name: "TV", link: "https://tv.apple.com" },
-  { name: "App Store", link: "https://apps.apple.com" },
-  { name: "Finder", link: "https://www.icloud.com/iclouddrive" },
-  { name: "Safari", link: "https://www.apple.com" },
-  { name: "Mail", link: "https://www.icloud.com/mail" },
-  { name: "Messages", link: "https://messages.google.com/web" },
-  { name: "Calendar", link: "https://www.icloud.com/calendar" },
-  { name: "Settings", link: "https://www.youtube.com" },
+  { name: "7 Plus", link: "https://www.7plus.com.au" },
+  { name: "9 Now", link: "https://www.9now.com.au" },
 ];
 
 // ─── Constants ───────────────────────────────────────────────────────────────
