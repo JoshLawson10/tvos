@@ -172,12 +172,9 @@ export default function Home() {
   }, [libraryApps, mounted]);
 
   // Launch
-  const handleLaunch = useCallback(
-    (_name: string, link: string, _origin: LaunchOrigin) => {
-      window.open(link, "_blank", "noopener,noreferrer");
-    },
-    [],
-  );
+  const handleLaunch = useCallback((_name: string, link: string) => {
+    window.open(link, "_blank", "noopener,noreferrer");
+  }, []);
 
   // Drag
   const handleDragStart = useCallback(
@@ -298,12 +295,7 @@ export default function Home() {
               area === "dock" ? dockApps[index] : libraryApps[index];
             if (!entry) return prev;
 
-            handleLaunch(entry.name, entry.link, {
-              x: window.innerWidth / 2,
-              y: window.innerHeight / 2,
-              width: 200,
-              height: 120,
-            });
+            handleLaunch(entry.name, entry.link);
             return prev;
           }
 

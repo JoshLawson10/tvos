@@ -10,7 +10,7 @@ interface AppIconProps {
   displayName?: boolean;
   isInDock?: boolean;
   focused?: boolean;
-  onLaunch?: (name: string, link: string, origin: LaunchOrigin) => void;
+  onLaunch?: (name: string, link: string) => void;
 }
 
 export default function AppIcon({
@@ -27,16 +27,7 @@ export default function AppIcon({
 
   const handleClick = useCallback(() => {
     if (!onLaunch) return;
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-
-    onLaunch(name, link, {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-      width: rect.width,
-      height: rect.height,
-    });
+    onLaunch(name, link);
   }, [name, link, onLaunch]);
 
   const isActive = hovered || focused;
