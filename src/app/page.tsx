@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
-import AppWindow, { type LaunchOrigin } from "@/components/AppWindow";
+import { type LaunchOrigin } from "@/components/AppWindow";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
 
@@ -18,12 +18,6 @@ type FocusArea = "dock" | "library";
 interface FocusState {
   area: FocusArea;
   index: number;
-}
-
-interface ActiveApp {
-  name: string;
-  link: string;
-  origin: LaunchOrigin;
 }
 
 type DragSource = "dock" | "library";
@@ -157,7 +151,6 @@ export default function Home() {
   const [dockApps, setDockApps] = useState<AppEntry[]>(DEFAULT_DOCK);
   const [libraryApps, setLibraryApps] = useState<AppEntry[]>(DEFAULT_LIBRARY);
   const [mounted, setMounted] = useState(false);
-  const [activeApp, setActiveApp] = useState<ActiveApp | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
@@ -179,14 +172,13 @@ export default function Home() {
     if (mounted) writeStorage(STORAGE_KEY_LIBRARY, libraryApps);
   }, [libraryApps, mounted]);
 
-  // Launch / close
+  // Launch
   const handleLaunch = useCallback(
-    (name: string, link: string, origin: LaunchOrigin) => {
-      setActiveApp({ name, link, origin });
+    (_name: string, link: string, _origin: LaunchOrigin) => {
+      window.open(link, "_blank", "noopener,noreferrer");
     },
     [],
   );
-  const handleClose = useCallback(() => setActiveApp(null), []);
 
   // Drag
   const handleDragStart = useCallback(
@@ -246,12 +238,6 @@ export default function Home() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Escape closes active app
-      if (activeApp) {
-        if (e.key === "Escape") handleClose();
-        return;
-      }
-
       setFocus((prev) => {
         const { area, index } = prev;
 
@@ -330,7 +316,7 @@ export default function Home() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dockApps, libraryApps, activeApp, handleLaunch, handleClose]);
+  }, [dockApps, libraryApps, handleLaunch]);
 
   const showDockPlaceholder =
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
@@ -614,15 +600,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
-      {activeApp && (
-        <AppWindow
-          appName={activeApp.name}
-          link={activeApp.link}
-          origin={activeApp.origin}
-          onClose={handleClose}
-        />
-      )}
     </>
   );
 }
