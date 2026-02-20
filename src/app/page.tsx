@@ -2,18 +2,60 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
+import AppWindow, { type LaunchOrigin } from "@/components/AppWindow";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface AppEntry {
+  name: string;
+  link: string;
+}
+
+type FocusArea = "dock" | "library";
+
+interface FocusState {
+  area: FocusArea;
+  index: number;
+}
+
+interface ActiveApp {
+  name: string;
+  link: string;
+  origin: LaunchOrigin;
+}
+
 type DragSource = "dock" | "library";
 
 interface DragState {
-  name: string;
+  entry: AppEntry;
   from: DragSource;
   index: number;
 }
+
+// ─── App definitions ─────────────────────────────────────────────────────────
+
+const DEFAULT_DOCK: AppEntry[] = [
+  { name: "Youtube", link: "https://www.youtube.com" },
+  { name: "Safari", link: "https://www.apple.com" },
+  { name: "Mail", link: "https://www.icloud.com/mail" },
+  { name: "Messages", link: "https://messages.google.com/web" },
+  { name: "Calendar", link: "https://www.icloud.com/calendar" },
+];
+
+const DEFAULT_LIBRARY: AppEntry[] = [
+  { name: "Photos", link: "https://www.icloud.com/photos" },
+  { name: "Music", link: "https://music.apple.com" },
+  { name: "TV", link: "https://tv.apple.com" },
+  { name: "App Store", link: "https://apps.apple.com" },
+  { name: "Finder", link: "https://www.icloud.com/iclouddrive" },
+  { name: "Safari", link: "https://www.apple.com" },
+  { name: "Mail", link: "https://www.icloud.com/mail" },
+  { name: "Messages", link: "https://messages.google.com/web" },
+  { name: "Calendar", link: "https://www.icloud.com/calendar" },
+  { name: "Settings", link: "https://www.youtube.com" },
+];
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -21,84 +63,74 @@ const DOCK_MAX_APPS = 5;
 const STORAGE_KEY_DOCK = "dockApps";
 const STORAGE_KEY_LIBRARY = "libraryApps";
 
-const DEFAULT_DOCK: string[] = [
-  "Finder",
-  "Safari",
-  "Mail",
-  "Messages",
-  "Calendar",
-];
+// ─── Glass / animation CSS ───────────────────────────────────────────────────
 
-const DEFAULT_LIBRARY: string[] = Array.from({ length: 4 }, () => [
-  "Finder",
-  "Safari",
-  "Mail",
-  "Messages",
-  "Calendar",
-]).flat();
-
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const ANIMATIONS = `
+const GLASS_CSS = `
   @keyframes orb1 {
     0%, 100% { transform: translate(0px, 0px) scale(1); }
-    33% { transform: translate(80px, -60px) scale(1.1); }
-    66% { transform: translate(-40px, 40px) scale(0.95); }
+    33%       { transform: translate(80px, -60px) scale(1.1); }
+    66%       { transform: translate(-40px, 40px) scale(0.95); }
   }
   @keyframes orb2 {
     0%, 100% { transform: translate(0px, 0px) scale(1); }
-    33% { transform: translate(-60px, 80px) scale(0.9); }
-    66% { transform: translate(50px, -30px) scale(1.05); }
+    33%       { transform: translate(-60px, 80px) scale(0.9); }
+    66%       { transform: translate(50px, -30px) scale(1.05); }
   }
   @keyframes orb3 {
     0%, 100% { transform: translate(0px, 0px) scale(1); }
-    50% { transform: translate(30px, 60px) scale(1.08); }
+    50%       { transform: translate(30px, 60px) scale(1.08); }
   }
-
   .dock-glass {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255,255,255,0.07);
     backdrop-filter: blur(40px) saturate(180%) brightness(1.1);
     -webkit-backdrop-filter: blur(40px) saturate(180%) brightness(1.1);
-    border: 1px solid rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255,255,255,0.18);
     border-bottom: 1px solid rgba(255,255,255,0.08);
     box-shadow:
-      0 8px 32px rgba(0,0,0,0.45),
-      0 2px 8px rgba(0,0,0,0.3),
-      inset 0 1px 0 rgba(255,255,255,0.22),
-      inset 0 -1px 0 rgba(0,0,0,0.12),
-      inset 1px 0 0 rgba(255,255,255,0.08),
-      inset -1px 0 0 rgba(255,255,255,0.08);
+      0 8px 32px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -1px 0 rgba(0,0,0,0.12),
+      inset 1px 0 0 rgba(255,255,255,0.08), inset -1px 0 0 rgba(255,255,255,0.08);
   }
   .dock-glass::before {
     content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: linear-gradient(135deg,
-      rgba(255,255,255,0.12) 0%,
-      rgba(255,255,255,0.04) 40%,
-      rgba(255,255,255,0.08) 100%
-    );
+    position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 40%, rgba(255,255,255,0.08) 100%);
     pointer-events: none;
   }
   .library-glass {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255,255,255,0.05);
     backdrop-filter: blur(60px) saturate(160%) brightness(1.05);
     -webkit-backdrop-filter: blur(60px) saturate(160%) brightness(1.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 4px 24px rgba(0,0,0,0.3),
-      inset 0 1px 0 rgba(255,255,255,0.15),
-      inset 0 -1px 0 rgba(0,0,0,0.1);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.1);
   }
 `;
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 
-function readStorage<T>(key: string, fallback: T): T {
+function isAppEntryArray(value: unknown): value is AppEntry[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof (item as Record<string, unknown>).name === "string" &&
+        typeof (item as Record<string, unknown>).link === "string",
+    )
+  );
+}
+
+function readStorage(key: string, fallback: AppEntry[]): AppEntry[] {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    if (!isAppEntryArray(parsed)) {
+      localStorage.removeItem(key);
+      return fallback;
+    }
+    return parsed;
   } catch {
     return fallback;
   }
@@ -108,11 +140,9 @@ function writeStorage(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Quota exceeded or private browsing — silently ignore
+    /* quota / private browsing */
   }
 }
-
-// ─── Reorder helper ───────────────────────────────────────────────────────────
 
 function reorder<T>(list: T[], from: number, to: number): T[] {
   const next = [...list];
@@ -121,43 +151,50 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [dockApps, setDockApps] = useState<string[]>(DEFAULT_DOCK);
-  const [libraryApps, setLibraryApps] = useState<string[]>(DEFAULT_LIBRARY);
+  const [dockApps, setDockApps] = useState<AppEntry[]>(DEFAULT_DOCK);
+  const [libraryApps, setLibraryApps] = useState<AppEntry[]>(DEFAULT_LIBRARY);
   const [mounted, setMounted] = useState(false);
-
+  const [activeApp, setActiveApp] = useState<ActiveApp | null>(null);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
+  const [focus, setFocus] = useState<FocusState>({
+    area: "dock",
+    index: 0,
+  });
 
-  // Hydrate from localStorage once on mount
+  // Persistence
   useEffect(() => {
     setDockApps(readStorage(STORAGE_KEY_DOCK, DEFAULT_DOCK));
     setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, DEFAULT_LIBRARY));
     setMounted(true);
   }, []);
-
-  // Persist dock
   useEffect(() => {
     if (mounted) writeStorage(STORAGE_KEY_DOCK, dockApps);
   }, [dockApps, mounted]);
-
-  // Persist library
   useEffect(() => {
     if (mounted) writeStorage(STORAGE_KEY_LIBRARY, libraryApps);
   }, [libraryApps, mounted]);
 
-  // ── Drag handlers ────────────────────────────────────────────────────────
-
-  const handleDragStart = useCallback(
-    (name: string, from: DragSource, index: number) => {
-      setDragging({ name, from, index });
+  // Launch / close
+  const handleLaunch = useCallback(
+    (name: string, link: string, origin: LaunchOrigin) => {
+      setActiveApp({ name, link, origin });
     },
     [],
   );
+  const handleClose = useCallback(() => setActiveApp(null), []);
 
+  // Drag
+  const handleDragStart = useCallback(
+    (entry: AppEntry, from: DragSource, index: number) => {
+      setDragging({ entry, from, index });
+    },
+    [],
+  );
   const handleDragEnd = useCallback(() => {
     setDragging(null);
     setDockDragOver(null);
@@ -167,20 +204,19 @@ export default function Home() {
   const handleDropOnDock = useCallback(
     (targetIndex: number) => {
       if (!dragging) return;
-
       if (dragging.from === "dock") {
         setDockApps((prev) => reorder(prev, dragging.index, targetIndex));
       } else {
         if (dockApps.length >= DOCK_MAX_APPS) return;
         setLibraryApps((prev) => {
-          const next = [...prev];
-          next.splice(dragging.index, 1);
-          return next;
+          const n = [...prev];
+          n.splice(dragging.index, 1);
+          return n;
         });
         setDockApps((prev) => {
-          const next = [...prev];
-          next.splice(targetIndex, 0, dragging.name);
-          return next;
+          const n = [...prev];
+          n.splice(targetIndex, 0, dragging.entry);
+          return n;
         });
       }
     },
@@ -190,34 +226,118 @@ export default function Home() {
   const handleDropOnLibrary = useCallback(
     (targetIndex: number) => {
       if (!dragging) return;
-
       if (dragging.from === "library") {
         setLibraryApps((prev) => reorder(prev, dragging.index, targetIndex));
       } else {
         setDockApps((prev) => {
-          const next = [...prev];
-          next.splice(dragging.index, 1);
-          return next;
+          const n = [...prev];
+          n.splice(dragging.index, 1);
+          return n;
         });
         setLibraryApps((prev) => {
-          const next = [...prev];
-          next.splice(targetIndex, 0, dragging.name);
-          return next;
+          const n = [...prev];
+          n.splice(targetIndex, 0, dragging.entry);
+          return n;
         });
       }
     },
     [dragging],
   );
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Escape closes active app
+      if (activeApp) {
+        if (e.key === "Escape") handleClose();
+        return;
+      }
 
-  const dockDropPlaceholderVisible =
+      setFocus((prev) => {
+        const { area, index } = prev;
+
+        const dockMax = dockApps.length - 1;
+        const libraryMax = libraryApps.length - 1;
+        const cols = DOCK_MAX_APPS; // library grid columns
+
+        switch (e.key) {
+          case "ArrowRight": {
+            e.preventDefault();
+            const max = area === "dock" ? dockMax : libraryMax;
+            return { area, index: Math.min(index + 1, max) };
+          }
+
+          case "ArrowLeft": {
+            e.preventDefault();
+            return { area, index: Math.max(index - 1, 0) };
+          }
+
+          case "ArrowUp": {
+            e.preventDefault();
+            if (area === "library") {
+              // Move up one row within library
+              if (index - cols >= 0) {
+                return { area, index: index - cols };
+              }
+              // Top row of library → go up to dock, preserving column
+              return {
+                area: "dock",
+                index: Math.min(index % cols, dockMax),
+              };
+            }
+            // In dock — nothing above it
+            return prev;
+          }
+
+          case "ArrowDown": {
+            e.preventDefault();
+            if (area === "dock") {
+              // Dock is above library — enter library at first row, same column
+              const col = Math.min(index, cols - 1);
+              return {
+                area: "library",
+                index: Math.min(col, libraryMax),
+              };
+            }
+            // Already in library — move down one row
+            const nextIndex = index + cols;
+            if (nextIndex <= libraryMax) {
+              return { area, index: Math.min(nextIndex, libraryMax) };
+            }
+            // Bottom row — stay put
+            return prev;
+          }
+
+          case "Enter": {
+            e.preventDefault();
+            const entry =
+              area === "dock" ? dockApps[index] : libraryApps[index];
+            if (!entry) return prev;
+
+            handleLaunch(entry.name, entry.link, {
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 2,
+              width: 200,
+              height: 120,
+            });
+            return prev;
+          }
+
+          default:
+            return prev;
+        }
+      });
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dockApps, libraryApps, activeApp, handleLaunch, handleClose]);
+
+  const showDockPlaceholder =
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
 
   return (
     <>
-      <style>{ANIMATIONS}</style>
-
+      <style>{GLASS_CSS}</style>
       <div
         style={{
           minHeight: "100vh",
@@ -226,7 +346,7 @@ export default function Home() {
           overflowX: "hidden",
         }}
       >
-        {/* ── Ambient orbs ─────────────────────────────────────────────── */}
+        {/* Orbs */}
         <div
           aria-hidden="true"
           style={{
@@ -238,27 +358,26 @@ export default function Home() {
           }}
         >
           <Orb
-            color="rgba(56, 130, 246, 0.55)"
+            color="rgba(56,130,246,0.55)"
             size="55vw"
             top="5%"
             left="10%"
             animation="orb1 18s ease-in-out infinite"
           />
           <Orb
-            color="rgba(139, 92, 246, 0.45)"
+            color="rgba(139,92,246,0.45)"
             size="50vw"
             top="20%"
             right="5%"
             animation="orb2 22s ease-in-out infinite"
           />
           <Orb
-            color="rgba(6, 182, 212, 0.35)"
+            color="rgba(6,182,212,0.35)"
             size="35vw"
             bottom="30%"
             left="35%"
             animation="orb3 15s ease-in-out infinite"
           />
-          {/* Dark vignette */}
           <div
             style={{
               position: "absolute",
@@ -266,14 +385,14 @@ export default function Home() {
               height: "80vw",
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(30, 27, 75, 0.8) 0%, rgba(5, 10, 20, 0) 70%)",
+                "radial-gradient(circle, rgba(30,27,75,0.8) 0%, rgba(5,10,20,0) 70%)",
               top: "-20%",
               left: "-10%",
             }}
           />
         </div>
 
-        {/* ── Film-grain noise overlay ───────────────────────────────────── */}
+        {/* Grain */}
         <div
           aria-hidden="true"
           style={{
@@ -288,7 +407,7 @@ export default function Home() {
 
         <Clock />
 
-        {/* ── Dock ─────────────────────────────────────────────────────── */}
+        {/* Dock */}
         <div
           style={{
             height: "100vh",
@@ -317,11 +436,11 @@ export default function Home() {
                 position: "relative",
               }}
             >
-              {dockApps.map((app, i) => (
+              {dockApps.map((entry, i) => (
                 <div
                   key={`dock-${i}`}
                   draggable
-                  onDragStart={() => handleDragStart(app, "dock", i)}
+                  onDragStart={() => handleDragStart(entry, "dock", i)}
                   onDragEnd={handleDragEnd}
                   onDragOver={(e) => {
                     e.preventDefault();
@@ -349,12 +468,18 @@ export default function Home() {
                     transform: dockDragOver === i ? "scale(1.04)" : "scale(1)",
                   }}
                 >
-                  <AppIcon name={app} isInDock />
+                  <AppIcon
+                    name={entry.name}
+                    link={entry.link}
+                    isInDock
+                    // FIX: was incorrectly checking "library" for dock items
+                    focused={focus.area === "dock" && focus.index === i}
+                    onLaunch={handleLaunch}
+                  />
                 </div>
               ))}
 
-              {/* Empty slot shown when dragging from library */}
-              {dockDropPlaceholderVisible && (
+              {showDockPlaceholder && (
                 <div
                   aria-hidden="true"
                   style={{
@@ -381,7 +506,6 @@ export default function Home() {
                 />
               )}
             </div>
-
             {/* Floor reflection */}
             <div
               aria-hidden="true"
@@ -403,7 +527,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── App Library ──────────────────────────────────────────────── */}
+        {/* Library */}
         <div
           style={{
             display: "flex",
@@ -423,7 +547,6 @@ export default function Home() {
                 overflow: "hidden",
               }}
             >
-              {/* Inner gradient sheen */}
               <div
                 aria-hidden="true"
                 style={{
@@ -435,7 +558,6 @@ export default function Home() {
                   borderRadius: "inherit",
                 }}
               />
-
               <div
                 style={{
                   display: "grid",
@@ -446,11 +568,11 @@ export default function Home() {
                 }}
                 onDragOver={(e) => e.preventDefault()}
               >
-                {libraryApps.map((app, i) => (
+                {libraryApps.map((entry, i) => (
                   <div
                     key={`lib-${i}`}
                     draggable
-                    onDragStart={() => handleDragStart(app, "library", i)}
+                    onDragStart={() => handleDragStart(entry, "library", i)}
                     onDragEnd={handleDragEnd}
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -478,7 +600,13 @@ export default function Home() {
                         libraryDragOver === i ? "scale(1.05)" : "scale(1)",
                     }}
                   >
-                    <AppIcon name={app} />
+                    <AppIcon
+                      name={entry.name}
+                      link={entry.link}
+                      // FIX: was incorrectly checking "dock" for library items
+                      focused={focus.area === "library" && focus.index === i}
+                      onLaunch={handleLaunch}
+                    />
                   </div>
                 ))}
               </div>
@@ -486,6 +614,15 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      {activeApp && (
+        <AppWindow
+          appName={activeApp.name}
+          link={activeApp.link}
+          origin={activeApp.origin}
+          onClose={handleClose}
+        />
+      )}
     </>
   );
 }
