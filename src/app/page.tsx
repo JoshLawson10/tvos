@@ -4,23 +4,22 @@ import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
+import AddAppModal from "@/components/AddAppModal";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface AppEntry {
   name: string;
   link: string;
+  iconData?: string;
 }
 
 type FocusArea = "dock" | "library";
-
 interface FocusState {
   area: FocusArea;
   index: number;
 }
-
 type DragSource = "dock" | "library";
-
 interface DragState {
   entry: AppEntry;
   from: DragSource;
@@ -30,26 +29,11 @@ interface DragState {
 // ─── App definitions ─────────────────────────────────────────────────────────
 
 const DEFAULT_DOCK: AppEntry[] = [
-  {
-    name: "Youtube",
-    link: "https://www.youtube.com",
-  },
-  {
-    name: "Netflix",
-    link: "https://www.netflix.com",
-  },
-  {
-    name: "Disney+",
-    link: "https://www.disneyplus.com",
-  },
-  {
-    name: "Kayo",
-    link: "https://www.kayosports.com.au",
-  },
-  {
-    name: "Spotify",
-    link: "https://www.spotify.com",
-  },
+  { name: "Youtube", link: "https://www.youtube.com" },
+  { name: "Netflix", link: "https://www.netflix.com" },
+  { name: "Disney+", link: "https://www.disneyplus.com" },
+  { name: "Kayo", link: "https://www.kayosports.com.au" },
+  { name: "Spotify", link: "https://www.spotify.com" },
 ];
 
 const DEFAULT_LIBRARY: AppEntry[] = [
@@ -106,6 +90,47 @@ const GLASS_CSS = `
     border: 1px solid rgba(255,255,255,0.12);
     box-shadow: 0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.1);
   }
+
+  @keyframes addBtnPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(99,179,255,0); }
+    50%       { box-shadow: 0 0 0 6px rgba(99,179,255,0.08); }
+  }
+  .add-app-btn {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 14px;
+    border: 1.5px dashed rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.04);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+    position: relative; overflow: hidden;
+  }
+  .add-app-btn:hover, .add-app-btn:focus-visible {
+    border-color: rgba(99,179,255,0.55);
+    background: rgba(99,179,255,0.07);
+    transform: scale(1.04);
+    outline: none;
+    animation: addBtnPulse 2s ease-in-out infinite;
+  }
+  .add-app-btn:active { transform: scale(0.98); }
+  .add-app-btn-icon {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.18);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.18s ease, border-color 0.18s ease;
+    font-size: 20px; line-height: 1; color: rgba(255,255,255,0.55);
+  }
+  .add-app-btn:hover .add-app-btn-icon,
+  .add-app-btn:focus-visible .add-app-btn-icon {
+    background: rgba(99,179,255,0.18); border-color: rgba(99,179,255,0.4); color: rgba(99,179,255,0.9);
+  }
+  .add-app-btn-label {
+    font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.3); letter-spacing: 0.02em;
+    transition: color 0.18s ease;
+  }
+  .add-app-btn:hover .add-app-btn-label,
+  .add-app-btn:focus-visible .add-app-btn-label { color: rgba(99,179,255,0.75); }
 `;
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
@@ -142,7 +167,7 @@ function writeStorage(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* quota / private browsing */
+    /* quota */
   }
 }
 
@@ -166,10 +191,8 @@ export default function Home() {
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
-  const [focus, setFocus] = useState<FocusState>({
-    area: "dock",
-    index: 0,
-  });
+  const [focus, setFocus] = useState<FocusState>({ area: "dock", index: 0 });
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   // Persistence
   useEffect(() => {
@@ -184,10 +207,17 @@ export default function Home() {
     if (mounted) writeStorage(STORAGE_KEY_LIBRARY, libraryApps);
   }, [libraryApps, mounted]);
 
-  // Launch
   const handleLaunch = useCallback((_name: string, link: string) => {
     window.open(link, "_blank", "noopener,noreferrer");
   }, []);
+
+  // Add app — now also accepts optional iconData
+  const handleAddApp = useCallback(
+    (name: string, link: string, iconData?: string) => {
+      setLibraryApps((prev) => [...prev, { name, link, iconData }]);
+    },
+    [],
+  );
 
   // Drag
   const handleDragStart = useCallback(
@@ -245,14 +275,15 @@ export default function Home() {
     [dragging],
   );
 
+  // Keyboard nav — virtual index libraryApps.length == the + button
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (addModalOpen) return;
       setFocus((prev) => {
         const { area, index } = prev;
-
         const dockMax = dockApps.length - 1;
-        const libraryMax = libraryApps.length - 1;
-        const cols = DOCK_MAX_APPS; // library grid columns
+        const libraryMax = libraryApps.length; // + button at this virtual index
+        const cols = DOCK_MAX_APPS;
 
         switch (e.key) {
           case "ArrowRight": {
@@ -260,70 +291,52 @@ export default function Home() {
             const max = area === "dock" ? dockMax : libraryMax;
             return { area, index: Math.min(index + 1, max) };
           }
-
           case "ArrowLeft": {
             e.preventDefault();
             return { area, index: Math.max(index - 1, 0) };
           }
-
           case "ArrowUp": {
             e.preventDefault();
             if (area === "library") {
-              // Move up one row within library
-              if (index - cols >= 0) {
-                return { area, index: index - cols };
-              }
-              // Top row of library → go up to dock, preserving column
-              return {
-                area: "dock",
-                index: Math.min(index % cols, dockMax),
-              };
+              if (index - cols >= 0) return { area, index: index - cols };
+              return { area: "dock", index: Math.min(index % cols, dockMax) };
             }
-            // In dock — nothing above it
             return prev;
           }
-
           case "ArrowDown": {
             e.preventDefault();
             if (area === "dock") {
-              // Dock is above library — enter library at first row, same column
-              const col = Math.min(index, cols - 1);
-              return {
-                area: "library",
-                index: Math.min(col, libraryMax),
-              };
+              return { area: "library", index: Math.min(index, libraryMax) };
             }
-            // Already in library — move down one row
-            const nextIndex = index + cols;
-            if (nextIndex <= libraryMax) {
-              return { area, index: Math.min(nextIndex, libraryMax) };
-            }
-            // Bottom row — stay put
-            return prev;
+            const next = index + cols;
+            return next <= libraryMax
+              ? { area, index: Math.min(next, libraryMax) }
+              : prev;
           }
-
           case "Enter": {
             e.preventDefault();
+            if (area === "library" && index === libraryApps.length) {
+              setAddModalOpen(true);
+              return prev;
+            }
             const entry =
               area === "dock" ? dockApps[index] : libraryApps[index];
-            if (!entry) return prev;
-
-            handleLaunch(entry.name, entry.link);
+            if (entry) handleLaunch(entry.name, entry.link);
             return prev;
           }
-
           default:
             return prev;
         }
       });
     };
-
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dockApps, libraryApps, handleLaunch]);
+  }, [dockApps, libraryApps, handleLaunch, addModalOpen]);
 
   const showDockPlaceholder =
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
+  const addBtnFocused =
+    focus.area === "library" && focus.index === libraryApps.length;
 
   return (
     <>
@@ -462,8 +475,8 @@ export default function Home() {
                     name={entry.name}
                     link={entry.link}
                     image={getIconPath(entry.name)}
+                    iconData={entry.iconData}
                     isInDock
-                    // FIX: was incorrectly checking "library" for dock items
                     focused={focus.area === "dock" && focus.index === i}
                     onLaunch={handleLaunch}
                   />
@@ -595,16 +608,50 @@ export default function Home() {
                       name={entry.name}
                       link={entry.link}
                       image={getIconPath(entry.name)}
+                      iconData={entry.iconData}
                       focused={focus.area === "library" && focus.index === i}
                       onLaunch={handleLaunch}
                     />
                   </div>
                 ))}
+
+                {/* ── Add App Button — always last, never draggable ── */}
+                <div>
+                  <button
+                    className="add-app-btn"
+                    aria-label="Add new app"
+                    onClick={() => setAddModalOpen(true)}
+                    style={
+                      addBtnFocused
+                        ? {
+                            borderColor: "rgba(99,179,255,0.55)",
+                            background: "rgba(99,179,255,0.07)",
+                            transform: "scale(1.04)",
+                            outline: "none",
+                          }
+                        : undefined
+                    }
+                  >
+                    <span className="add-app-btn-icon">+</span>
+                    <span className="add-app-btn-label">Add App</span>
+                  </button>
+                  <span
+                    style={{ display: "block", height: "22px" }}
+                    aria-hidden="true"
+                  />
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Modal */}
+      <AddAppModal
+        open={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onAdd={handleAddApp}
+      />
     </>
   );
 }

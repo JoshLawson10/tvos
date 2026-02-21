@@ -7,6 +7,7 @@ interface AppIconProps {
   name: string;
   link: string;
   image?: string;
+  iconData?: string;
   displayName?: boolean;
   isInDock?: boolean;
   focused?: boolean;
@@ -17,6 +18,7 @@ export default function AppIcon({
   name,
   link,
   image,
+  iconData,
   displayName = false,
   isInDock = false,
   focused = false,
@@ -32,6 +34,10 @@ export default function AppIcon({
 
   const isActive = hovered || focused;
 
+  // Prefer user-uploaded base64 data, then fall back to /icons/<slug>.png
+  const src = iconData ?? image ?? `/icons/unknown.png`;
+  const useNativeImg = !!iconData; // Next/Image chokes on blob/data URIs in some configs
+
   return (
     <div
       style={{
@@ -46,6 +52,12 @@ export default function AppIcon({
         role="button"
         tabIndex={0}
         onClick={handleClick}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleClick();
+          }
+        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -62,13 +74,28 @@ export default function AppIcon({
             : "0 8px 24px rgba(0,0,0,0.35)",
         }}
       >
-        <Image
-          src={image ?? `/icons/unknown.png`}
-          alt={`${name} icon`}
-          fill
-          draggable={false}
-          style={{ objectFit: "cover" }}
-        />
+        {useNativeImg ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={src}
+            alt={`${name} icon`}
+            draggable={false}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+        ) : (
+          <Image
+            src={src}
+            alt={`${name} icon`}
+            fill
+            draggable={false}
+            style={{ objectFit: "cover" }}
+          />
+        )}
       </div>
 
       {!isInDock && (
