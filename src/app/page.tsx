@@ -5,6 +5,7 @@ import AppIcon from "@/components/AppIcon";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
 import AddAppModal from "@/components/AddAppModal";
+import { ContextMenuItem } from "@/components/ContextMenu";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -49,6 +50,46 @@ const DOCK_MAX_APPS = 5;
 const STORAGE_KEY_DOCK = "dockApps";
 const STORAGE_KEY_LIBRARY = "libraryApps";
 
+// ─── Icons for context menu items ────────────────────────────────────────────
+
+const DeleteIcon = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6M14 11v6" />
+    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+
+// ─── Context menu builder — add more items here in future ────────────────────
+
+function buildContextMenuItems(opts: {
+  onDelete: () => void;
+}): ContextMenuItem[] {
+  return [
+    // ── Add future items above this line ──
+    // e.g. { key: "edit", label: "Edit", icon: EditIcon, onSelect: opts.onEdit },
+    // e.g. { key: "move-to-dock", label: "Add to Dock", icon: DockIcon, onSelect: opts.onMoveToDock },
+    {
+      key: "delete",
+      label: "Delete",
+      icon: DeleteIcon,
+      variant: "danger",
+      dividerAbove: false, // set to true once items exist above
+      onSelect: opts.onDelete,
+    },
+  ];
+}
+
 // ─── Glass / animation CSS ───────────────────────────────────────────────────
 
 const GLASS_CSS = `
@@ -90,15 +131,12 @@ const GLASS_CSS = `
     border: 1px solid rgba(255,255,255,0.12);
     box-shadow: 0 4px 24px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.1);
   }
-
   @keyframes addBtnPulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(99,179,255,0); }
     50%       { box-shadow: 0 0 0 6px rgba(99,179,255,0.08); }
   }
   .add-app-btn {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    border-radius: 14px;
+    width: 100%; aspect-ratio: 16 / 9; border-radius: 14px;
     border: 1.5px dashed rgba(255,255,255,0.22);
     background: rgba(255,255,255,0.04);
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
@@ -107,10 +145,8 @@ const GLASS_CSS = `
     position: relative; overflow: hidden;
   }
   .add-app-btn:hover, .add-app-btn:focus-visible {
-    border-color: rgba(99,179,255,0.55);
-    background: rgba(99,179,255,0.07);
-    transform: scale(1.04);
-    outline: none;
+    border-color: rgba(99,179,255,0.55); background: rgba(99,179,255,0.07);
+    transform: scale(1.04); outline: none;
     animation: addBtnPulse 2s ease-in-out infinite;
   }
   .add-app-btn:active { transform: scale(0.98); }
@@ -211,12 +247,42 @@ export default function Home() {
     window.open(link, "_blank", "noopener,noreferrer");
   }, []);
 
-  // Add app — now also accepts optional iconData
   const handleAddApp = useCallback(
     (name: string, link: string, iconData?: string) => {
       setLibraryApps((prev) => [...prev, { name, link, iconData }]);
     },
     [],
+  );
+
+  // Delete handlers
+  const handleDeleteFromDock = useCallback(
+    (index: number) => {
+      setDockApps((prev) => prev.filter((_, i) => i !== index));
+      setFocus((prev) =>
+        prev.area === "dock"
+          ? {
+              area: "dock",
+              index: Math.max(0, Math.min(prev.index, dockApps.length - 2)),
+            }
+          : prev,
+      );
+    },
+    [dockApps.length],
+  );
+
+  const handleDeleteFromLibrary = useCallback(
+    (index: number) => {
+      setLibraryApps((prev) => prev.filter((_, i) => i !== index));
+      setFocus((prev) =>
+        prev.area === "library"
+          ? {
+              area: "library",
+              index: Math.max(0, Math.min(prev.index, libraryApps.length - 2)),
+            }
+          : prev,
+      );
+    },
+    [libraryApps.length],
   );
 
   // Drag
@@ -275,21 +341,25 @@ export default function Home() {
     [dragging],
   );
 
-  // Keyboard nav — virtual index libraryApps.length == the + button
+  // Keyboard nav
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (addModalOpen) return;
       setFocus((prev) => {
         const { area, index } = prev;
         const dockMax = dockApps.length - 1;
-        const libraryMax = libraryApps.length; // + button at this virtual index
+        const libraryMax = libraryApps.length;
         const cols = DOCK_MAX_APPS;
-
         switch (e.key) {
           case "ArrowRight": {
             e.preventDefault();
-            const max = area === "dock" ? dockMax : libraryMax;
-            return { area, index: Math.min(index + 1, max) };
+            return {
+              area,
+              index: Math.min(
+                index + 1,
+                area === "dock" ? dockMax : libraryMax,
+              ),
+            };
           }
           case "ArrowLeft": {
             e.preventDefault();
@@ -305,9 +375,8 @@ export default function Home() {
           }
           case "ArrowDown": {
             e.preventDefault();
-            if (area === "dock") {
+            if (area === "dock")
               return { area: "library", index: Math.min(index, libraryMax) };
-            }
             const next = index + cols;
             return next <= libraryMax
               ? { area, index: Math.min(next, libraryMax) }
@@ -479,6 +548,9 @@ export default function Home() {
                     isInDock
                     focused={focus.area === "dock" && focus.index === i}
                     onLaunch={handleLaunch}
+                    contextMenuItems={buildContextMenuItems({
+                      onDelete: () => handleDeleteFromDock(i),
+                    })}
                   />
                 </div>
               ))}
@@ -510,7 +582,6 @@ export default function Home() {
                 />
               )}
             </div>
-            {/* Floor reflection */}
             <div
               aria-hidden="true"
               style={{
@@ -611,11 +682,14 @@ export default function Home() {
                       iconData={entry.iconData}
                       focused={focus.area === "library" && focus.index === i}
                       onLaunch={handleLaunch}
+                      contextMenuItems={buildContextMenuItems({
+                        onDelete: () => handleDeleteFromLibrary(i),
+                      })}
                     />
                   </div>
                 ))}
 
-                {/* ── Add App Button — always last, never draggable ── */}
+                {/* Add App button */}
                 <div>
                   <button
                     className="add-app-btn"
@@ -646,7 +720,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Modal */}
       <AddAppModal
         open={addModalOpen}
         onClose={() => setAddModalOpen(false)}
