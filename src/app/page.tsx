@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import AppIcon from "@/components/AppIcon";
 import Clock from "@/components/Clock";
 import Orb from "@/components/Orb";
-import AddAppModal from "@/components/AddAppModal";
+import AddAppModal, { AppModalValues } from "@/components/AddAppModal";
 import { ContextMenuItem } from "@/components/ContextMenu";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -24,6 +24,12 @@ type DragSource = "dock" | "library";
 interface DragState {
   entry: AppEntry;
   from: DragSource;
+  index: number;
+}
+
+// Tracks which app is being edited and where it lives
+interface EditTarget {
+  source: "dock" | "library";
   index: number;
 }
 
@@ -50,7 +56,23 @@ const DOCK_MAX_APPS = 5;
 const STORAGE_KEY_DOCK = "dockApps";
 const STORAGE_KEY_LIBRARY = "libraryApps";
 
-// ─── Icons for context menu items ────────────────────────────────────────────
+// ─── Context menu icons ───────────────────────────────────────────────────────
+
+const EditIcon = (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+  </svg>
+);
 
 const DeleteIcon = (
   <svg
@@ -73,18 +95,23 @@ const DeleteIcon = (
 // ─── Context menu builder — add more items here in future ────────────────────
 
 function buildContextMenuItems(opts: {
+  onEdit: () => void;
   onDelete: () => void;
 }): ContextMenuItem[] {
   return [
-    // ── Add future items above this line ──
-    // e.g. { key: "edit", label: "Edit", icon: EditIcon, onSelect: opts.onEdit },
-    // e.g. { key: "move-to-dock", label: "Add to Dock", icon: DockIcon, onSelect: opts.onMoveToDock },
+    {
+      key: "edit",
+      label: "Edit",
+      icon: EditIcon,
+      variant: "default",
+      onSelect: opts.onEdit,
+    },
     {
       key: "delete",
       label: "Delete",
       icon: DeleteIcon,
       variant: "danger",
-      dividerAbove: false, // set to true once items exist above
+      dividerAbove: true,
       onSelect: opts.onDelete,
     },
   ];
@@ -228,7 +255,10 @@ export default function Home() {
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
   const [focus, setFocus] = useState<FocusState>({ area: "dock", index: 0 });
+
+  // Modal state — null = closed for Add, EditTarget = open for Edit
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   // Persistence
   useEffect(() => {
@@ -247,6 +277,7 @@ export default function Home() {
     window.open(link, "_blank", "noopener,noreferrer");
   }, []);
 
+  // ── Add (new app) ──────────────────────────────────────────────────────────
   const handleAddApp = useCallback(
     (name: string, link: string, iconData?: string) => {
       setLibraryApps((prev) => [...prev, { name, link, iconData }]);
@@ -254,7 +285,54 @@ export default function Home() {
     [],
   );
 
-  // Delete handlers
+  // ── Edit (save changes to existing app) ───────────────────────────────────
+  const handleSaveEdit = useCallback(
+    (name: string, link: string, iconData?: string) => {
+      if (!editTarget) return;
+      const updated: AppEntry = { name, link, iconData };
+      if (editTarget.source === "dock") {
+        setDockApps((prev) =>
+          prev.map((e, i) => (i === editTarget.index ? updated : e)),
+        );
+      } else {
+        setLibraryApps((prev) =>
+          prev.map((e, i) => (i === editTarget.index ? updated : e)),
+        );
+      }
+    },
+    [editTarget],
+  );
+
+  const openEditModal = useCallback(
+    (source: "dock" | "library", index: number) => {
+      setEditTarget({ source, index });
+    },
+    [],
+  );
+
+  const closeModal = useCallback(() => {
+    setAddModalOpen(false);
+    setEditTarget(null);
+  }, []);
+
+  // Derive the values to pre-fill when editing
+  const editInitialValues: AppModalValues | undefined = editTarget
+    ? editTarget.source === "dock"
+      ? {
+          name: dockApps[editTarget.index]?.name ?? "",
+          link: dockApps[editTarget.index]?.link ?? "",
+          iconData: dockApps[editTarget.index]?.iconData,
+        }
+      : {
+          name: libraryApps[editTarget.index]?.name ?? "",
+          link: libraryApps[editTarget.index]?.link ?? "",
+          iconData: libraryApps[editTarget.index]?.iconData,
+        }
+    : undefined;
+
+  const isModalOpen = addModalOpen || editTarget !== null;
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDeleteFromDock = useCallback(
     (index: number) => {
       setDockApps((prev) => prev.filter((_, i) => i !== index));
@@ -285,7 +363,7 @@ export default function Home() {
     [libraryApps.length],
   );
 
-  // Drag
+  // ── Drag ───────────────────────────────────────────────────────────────────
   const handleDragStart = useCallback(
     (entry: AppEntry, from: DragSource, index: number) => {
       setDragging({ entry, from, index });
@@ -341,10 +419,10 @@ export default function Home() {
     [dragging],
   );
 
-  // Keyboard nav
+  // ── Keyboard nav ───────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (addModalOpen) return;
+      if (isModalOpen) return;
       setFocus((prev) => {
         const { area, index } = prev;
         const dockMax = dockApps.length - 1;
@@ -400,7 +478,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dockApps, libraryApps, handleLaunch, addModalOpen]);
+  }, [dockApps, libraryApps, handleLaunch, isModalOpen]);
 
   const showDockPlaceholder =
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
@@ -549,6 +627,7 @@ export default function Home() {
                     focused={focus.area === "dock" && focus.index === i}
                     onLaunch={handleLaunch}
                     contextMenuItems={buildContextMenuItems({
+                      onEdit: () => openEditModal("dock", i),
                       onDelete: () => handleDeleteFromDock(i),
                     })}
                   />
@@ -683,6 +762,7 @@ export default function Home() {
                       focused={focus.area === "library" && focus.index === i}
                       onLaunch={handleLaunch}
                       contextMenuItems={buildContextMenuItems({
+                        onEdit: () => openEditModal("library", i),
                         onDelete: () => handleDeleteFromLibrary(i),
                       })}
                     />
@@ -720,10 +800,12 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Modal — shared between Add and Edit modes */}
       <AddAppModal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        onAdd={handleAddApp}
+        open={isModalOpen}
+        onClose={closeModal}
+        onAdd={editTarget ? handleSaveEdit : handleAddApp}
+        initialValues={editInitialValues}
       />
     </>
   );

@@ -2,10 +2,18 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 
+export interface AppModalValues {
+  name: string;
+  link: string;
+  iconData?: string;
+}
+
 interface AddAppModalProps {
   open: boolean;
   onClose: () => void;
   onAdd: (name: string, link: string, iconData?: string) => void;
+  /** When provided the modal opens in edit mode — pre-filled, different title/CTA */
+  initialValues?: AppModalValues;
 }
 
 const MODAL_CSS = `
@@ -150,7 +158,10 @@ export default function AddAppModal({
   open,
   onClose,
   onAdd,
+  initialValues,
 }: AddAppModalProps) {
+  const isEditMode = !!initialValues;
+
   const [name, setName] = useState("");
   const [link, setLink] = useState("");
   const [iconData, setIconData] = useState<string | undefined>();
@@ -160,16 +171,18 @@ export default function AddAppModal({
   const nameRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Seed fields from initialValues when modal opens
   useEffect(() => {
     if (open) {
-      setName("");
-      setLink("");
-      setIconData(undefined);
+      setName(initialValues?.name ?? "");
+      setLink(initialValues?.link ?? "");
+      setIconData(initialValues?.iconData);
       setDragOver(false);
       setError(null);
       setTimeout(() => nameRef.current?.focus(), 60);
     }
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ^ intentionally only re-seed when `open` toggles, not on every initialValues change
 
   useEffect(() => {
     if (!open) return;
@@ -270,7 +283,7 @@ export default function AddAppModal({
         className="add-modal-panel"
         role="dialog"
         aria-modal="true"
-        aria-label="Add new app"
+        aria-label={isEditMode ? "Edit app" : "Add new app"}
         onClick={(e) => e.stopPropagation()}
         style={{
           position: "fixed",
@@ -302,7 +315,7 @@ export default function AddAppModal({
               letterSpacing: "-0.01em",
             }}
           >
-            Add App
+            {isEditMode ? "Edit App" : "Add App"}
           </h2>
           <p
             style={{
@@ -311,13 +324,15 @@ export default function AddAppModal({
               fontSize: "13px",
             }}
           >
-            Enter a name and URL, and optionally upload an icon.
+            {isEditMode
+              ? "Update the name, URL, or icon for this app."
+              : "Enter a name and URL, and optionally upload an icon."}
           </p>
         </div>
 
         {/* Icon + fields row */}
         <div style={{ display: "flex", gap: "18px", alignItems: "flex-start" }}>
-          {/* Icon upload — 16:9 thumbnail preview area */}
+          {/* Icon upload */}
           <div style={{ flex: "0 0 200px" }}>
             <label style={FIELD_LABEL}>
               Icon&nbsp;
@@ -332,8 +347,6 @@ export default function AddAppModal({
                 (optional)
               </span>
             </label>
-
-            {/* Hidden native file input */}
             <input
               ref={fileInputRef}
               type="file"
@@ -341,7 +354,6 @@ export default function AddAppModal({
               style={{ display: "none" }}
               onChange={handleFileChange}
             />
-
             <div
               className={zoneClass}
               role="button"
@@ -376,7 +388,6 @@ export default function AddAppModal({
                       borderRadius: "inherit",
                     }}
                   />
-                  {/* Hover overlay — "Replace" */}
                   <div className="icon-zone-overlay">
                     <svg
                       width="18"
@@ -405,7 +416,6 @@ export default function AddAppModal({
                 </>
               ) : (
                 <>
-                  {/* Upload prompt */}
                   <svg
                     width="22"
                     height="22"
@@ -445,7 +455,6 @@ export default function AddAppModal({
                 </>
               )}
             </div>
-
             {iconData && (
               <button
                 onClick={() => setIconData(undefined)}
@@ -488,7 +497,7 @@ export default function AddAppModal({
             )}
           </div>
 
-          {/* Name + URL fields */}
+          {/* Name + URL */}
           <div
             style={{
               flex: 1,
@@ -561,7 +570,7 @@ export default function AddAppModal({
             onClick={handleSubmit}
             disabled={!name.trim() || !link.trim()}
           >
-            Add to Library
+            {isEditMode ? "Save Changes" : "Add to Library"}
           </button>
         </div>
       </div>
