@@ -1,0 +1,16 @@
+{
+  "appId": "com.joshlawson.tvos",
+  "files": ["dist-electron", "dist-react"],
+  "icon": "./icon.png",
+  "mac": {
+    "target": "dmg",
+    "category": "public.app-category.utilities"
+  },
+  "win": {
+    "target": ["portable", "msi"]
+  },
+  "linux": {
+    "target": "AppImage",
+    "category": "Utility"
+  }
+}
