@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import AppIcon from "./components/AppIcon";
 import Clock from "./components/Clock";
 import Orb from "./components/Orb";
@@ -244,6 +244,8 @@ export default function App() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
+  const libraryRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   useEffect(() => {
     setDockApps(readStorage(STORAGE_KEY_DOCK, DEFAULT_DOCK));
     setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, DEFAULT_LIBRARY));
@@ -462,6 +464,38 @@ export default function App() {
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
   const addBtnFocused =
     focus.area === "library" && focus.index === libraryApps.length;
+
+  // ── Scrolling ───────────────────────────────────────────────────────────────────────
+
+  const setLibraryRef = (name: string) => (el: HTMLDivElement | null) => {
+    libraryRefs.current[name] = el;
+  };
+
+  useEffect(() => {
+    if (focus.area !== "library") return;
+
+    const entry = libraryApps[focus.index];
+    if (!entry) return;
+
+    const el = libraryRefs.current[entry.name];
+    if (!el) return;
+
+    el.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "nearest",
+    });
+  }, [focus, libraryApps]);
+
+  useEffect(() => {
+    if (focus.area === "dock") {
+      const rootEl = document.getElementById("root");
+      rootEl?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }
+  }, [focus.area]);
 
   return (
     <>
@@ -730,6 +764,7 @@ export default function App() {
                     }}
                   >
                     <AppIcon
+                      ref={setLibraryRef(entry.name)}
                       name={entry.name}
                       link={entry.link}
                       image={getIconPath(entry.name)}

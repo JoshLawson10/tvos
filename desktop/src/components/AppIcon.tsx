@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from "react";
+import { forwardRef, useRef, useState, useCallback } from "react";
 import ContextMenu from "./ContextMenu";
 import type { ContextMenuItem } from "./ContextMenu";
 
@@ -14,96 +14,95 @@ interface AppIconProps {
   contextMenuItems?: ContextMenuItem[];
 }
 
-export default function AppIcon({
-  name,
-  link,
-  image,
-  iconData,
-  displayName = false,
-  isInDock = false,
-  focused = false,
-  onLaunch,
-  contextMenuItems,
-}: AppIconProps) {
-  const [hovered, setHovered] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const handleClick = useCallback(() => {
-    if (onLaunch) {
-      onLaunch(name, link);
-      return;
-    }
-    // Open the URL inside Electron via IPC (no browser window)
-    window.electronAPI?.openApp(link);
-  }, [name, link, onLaunch]);
-
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      if (!contextMenuItems?.length) return;
-      e.preventDefault();
-      setMenuPos({ x: e.clientX, y: e.clientY });
+const AppIcon = forwardRef<HTMLDivElement, AppIconProps>(
+  (
+    {
+      name,
+      link,
+      image,
+      iconData,
+      displayName = false,
+      isInDock = false,
+      focused = false,
+      onLaunch,
+      contextMenuItems,
     },
-    [contextMenuItems],
-  );
+    forwardedRef,
+  ) => {
+    const [hovered, setHovered] = useState(false);
+    const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(
+      null,
+    );
 
-  const closeMenu = useCallback(() => setMenuPos(null), []);
+    const localRef = useRef<HTMLDivElement>(null);
 
-  const isActive = hovered || focused;
-  const src = iconData ?? image ?? "/icons/unknown.png";
-  const useNativeImg = !!iconData;
+    const handleClick = useCallback(() => {
+      if (onLaunch) {
+        onLaunch(name, link);
+        return;
+      }
+      window.electronAPI?.openApp(link);
+    }, [name, link, onLaunch]);
 
-  return (
-    <>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
+    const handleContextMenu = useCallback(
+      (e: React.MouseEvent) => {
+        if (!contextMenuItems?.length) return;
+        e.preventDefault();
+        setMenuPos({ x: e.clientX, y: e.clientY });
+      },
+      [contextMenuItems],
+    );
+
+    const closeMenu = useCallback(() => setMenuPos(null), []);
+
+    const isActive = hovered || focused;
+    const src = iconData ?? image ?? "/icons/unknown.png";
+
+    return (
+      <>
         <div
-          ref={containerRef}
-          role="button"
-          tabIndex={0}
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              handleClick();
-            }
-          }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
           style={{
-            width: "100%",
-            aspectRatio: "16/9",
-            borderRadius: 16,
-            overflow: "hidden",
-            position: "relative",
-            cursor: "pointer",
-            transform: isActive ? "scale(1.08)" : "scale(1)",
-            transition: "transform 0.18s ease",
-            boxShadow: isActive
-              ? "0 0 0 3px rgba(255,255,255,0.7)"
-              : "0 8px 24px rgba(0,0,0,0.35)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          {useNativeImg ? (
-            <img
-              src={src}
-              alt={`${name} icon`}
-              draggable={false}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-            />
-          ) : (
+          <div
+            ref={(el) => {
+              localRef.current = el;
+              if (typeof forwardedRef === "function") {
+                forwardedRef(el);
+              } else if (forwardedRef) {
+                forwardedRef.current = el;
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            onClick={handleClick}
+            onContextMenu={handleContextMenu}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleClick();
+              }
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+              width: isInDock ? 200 : "100%",
+              aspectRatio: "16/9",
+              borderRadius: 16,
+              overflow: "hidden",
+              position: "relative",
+              cursor: "pointer",
+              transform: isActive ? "scale(1.08)" : "scale(1)",
+              transition: "transform 0.18s ease",
+              boxShadow: isActive
+                ? "0 0 0 3px rgba(255,255,255,0.7)"
+                : "0 8px 24px rgba(0,0,0,0.35)",
+            }}
+          >
             <img
               src={src}
               alt={`${name} icon`}
@@ -118,32 +117,34 @@ export default function AppIcon({
                 (e.target as HTMLImageElement).src = "/icons/unknown.png";
               }}
             />
+          </div>
+
+          {!isInDock && (
+            <span
+              style={{
+                color: "white",
+                fontSize: 14,
+                opacity: isActive || displayName ? 1 : 0,
+                transition: "opacity 0.2s",
+                userSelect: "none",
+              }}
+            >
+              {name}
+            </span>
           )}
         </div>
 
-        {!isInDock && (
-          <span
-            style={{
-              color: "white",
-              fontSize: 14,
-              opacity: isActive || displayName ? 1 : 0,
-              transition: "opacity 0.2s",
-              userSelect: "none",
-            }}
-          >
-            {name}
-          </span>
+        {menuPos && contextMenuItems?.length && (
+          <ContextMenu
+            x={menuPos.x}
+            y={menuPos.y}
+            items={contextMenuItems}
+            onClose={closeMenu}
+          />
         )}
-      </div>
+      </>
+    );
+  },
+);
 
-      {menuPos && contextMenuItems?.length && (
-        <ContextMenu
-          x={menuPos.x}
-          y={menuPos.y}
-          items={contextMenuItems}
-          onClose={closeMenu}
-        />
-      )}
-    </>
-  );
-}
+export default AppIcon;
