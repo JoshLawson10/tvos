@@ -13,7 +13,7 @@ import { isDev } from "./util.js";
 const CHROME_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) " +
-  "Chrome/124.0.0.0 Safari/537.36";
+  "Chrome/131.0.0.0 Safari/537.36";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -58,12 +58,38 @@ function openAppView(url: string) {
       contextIsolation: true,
       nodeIntegration: false,
       autoplayPolicy: "no-user-gesture-required",
+      allowRunningInsecureContent: false,
     },
   });
 
   mainWindow.contentView.addChildView(activeView);
   activeView.setBounds({ x: 0, y: 0, width, height });
   activeView.webContents.setUserAgent(CHROME_UA);
+
+  activeView.webContents.session.webRequest.onBeforeSendHeaders(
+    (details, callback) => {
+      const headers = { ...details.requestHeaders };
+      headers["Accept-Language"] = "en-US,en;q=0.9";
+      headers["sec-ch-ua"] =
+        '"Chromium";v="131", "Google Chrome";v="131", "Not_A Brand";v="24"';
+      headers["sec-ch-ua-mobile"] = "?0";
+      headers["sec-ch-ua-platform"] = '"macOS"';
+      delete headers["X-Electron-Version"];
+      callback({ requestHeaders: headers });
+    },
+  );
+
+  activeView.webContents.session.setPermissionRequestHandler(
+    (_webContents, permission, callback) => {
+      const allowed = [
+        "media",
+        "mediaKeySystem",
+        "notifications",
+        "geolocation",
+      ];
+      callback(allowed.includes(permission));
+    },
+  );
   activeView.webContents.loadURL(url);
 
   mainWindow.on("resize", handleResize);
@@ -127,7 +153,10 @@ ipcMain.handle("get-available-apps", () => {
 });
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const { components } = await import("electron");
+  await components.whenReady();
+
   createWindow();
   globalShortcut.register("Escape", () => {
     if (activeView) closeAppView();
