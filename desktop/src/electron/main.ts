@@ -6,6 +6,7 @@ import {
   WebContentsView,
 } from "electron";
 import path from "path";
+import fs from "fs";
 import { isDev } from "./util.js";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -100,6 +101,29 @@ ipcMain.handle("open-app", (_event, url) => {
 
 ipcMain.handle("close-app", () => {
   closeAppView();
+});
+
+ipcMain.handle("get-available-apps", () => {
+  const appsPath = isDev()
+    ? path.join(process.cwd(), "public/apps.json")
+    : path.join(app.getAppPath(), "dist-react/apps.json");
+
+  const iconsBase = isDev()
+    ? "http://localhost:3000"
+    : `file://${path.join(app.getAppPath(), "dist-react")}`;
+
+  try {
+    const raw = fs.readFileSync(appsPath, "utf-8");
+    const apps = JSON.parse(raw);
+
+    return apps.map((a: { icon?: string; [key: string]: unknown }) => {
+      if (!a.icon) return a;
+      const rel = a.icon.replace(/^\.\//, "");
+      return { ...a, icon: `${iconsBase}/${rel}` };
+    });
+  } catch {
+    return [];
+  }
 });
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────

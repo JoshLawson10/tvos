@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import AppIcon from "./components/AppIcon";
 import Clock from "./components/Clock";
 import Orb from "./components/Orb";
+import AppPickerModal from "./components/AppPickerModal";
 import AddAppModal from "./components/AddAppModal";
 import type { AppModalValues } from "./components/AddAppModal";
 import type { ContextMenuItem } from "./components/ContextMenu";
@@ -11,7 +12,8 @@ import type { ContextMenuItem } from "./components/ContextMenu";
 interface AppEntry {
   name: string;
   link: string;
-  iconData?: string;
+  icon?: string; // bundled local path, e.g. ./icons/youtube.png
+  iconData?: string; // user-uploaded base64 data URL — takes priority over icon
 }
 
 type FocusArea = "dock" | "library";
@@ -32,20 +34,22 @@ interface EditTarget {
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
+// Links only — names/icons are resolved from apps.json at runtime so there's
+// no duplication. Order here determines the default order in each area.
 
-const DEFAULT_DOCK: AppEntry[] = [
-  { name: "Youtube", link: "https://www.youtube.com" },
-  { name: "Netflix", link: "https://www.netflix.com" },
-  { name: "Disney+", link: "https://www.disneyplus.com" },
-  { name: "Kayo", link: "https://www.kayosports.com.au" },
-  { name: "Spotify", link: "https://www.spotify.com" },
+const DEFAULT_DOCK_LINKS = [
+  "https://www.youtube.com",
+  "https://www.netflix.com",
+  "https://www.disneyplus.com",
+  "https://kayosports.com.au",
+  "https://open.spotify.com",
 ];
 
-const DEFAULT_LIBRARY: AppEntry[] = [
-  { name: "Photos", link: "https://www.icloud.com/photos" },
-  { name: "TV", link: "https://tv.apple.com" },
-  { name: "7 Plus", link: "https://www.7plus.com.au" },
-  { name: "9 Now", link: "https://www.9now.com.au" },
+const DEFAULT_LIBRARY_LINKS = [
+  "https://www.icloud.com/photos",
+  "https://tv.apple.com",
+  "https://7plus.com.au",
+  "https://9now.com.au",
 ];
 
 const DOCK_MAX_APPS = 5;
@@ -158,10 +162,6 @@ function reorder<T>(list: T[], from: number, to: number): T[] {
   return next;
 }
 
-function getIconPath(name: string): string {
-  return `./icons/${name.toLowerCase().replace(/[^a-z0-9]/g, "")}.png`;
-}
-
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 
 const GLASS_CSS = `
@@ -234,22 +234,75 @@ const GLASS_CSS = `
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [dockApps, setDockApps] = useState<AppEntry[]>(DEFAULT_DOCK);
-  const [libraryApps, setLibraryApps] = useState<AppEntry[]>(DEFAULT_LIBRARY);
+  useEffect(() => {
+    window.electronAPI?.getAvailableApps().then((apps) => {
+      console.log(JSON.stringify(apps[0], null, 2));
+    });
+  }, []);
+
+  const [dockApps, setDockApps] = useState<AppEntry[]>([]);
+  const [libraryApps, setLibraryApps] = useState<AppEntry[]>([]);
   const [mounted, setMounted] = useState(false);
   const [dragging, setDragging] = useState<DragState | null>(null);
   const [dockDragOver, setDockDragOver] = useState<number | null>(null);
   const [libraryDragOver, setLibraryDragOver] = useState<number | null>(null);
   const [focus, setFocus] = useState<FocusState>({ area: "dock", index: 0 });
+
+  // ── Modal state ────────────────────────────────────────────────────────────
+  // Flow: "Add App" button → picker modal → (pick preset OR click custom) → custom modal
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+
+  const isAnyModalOpen = pickerOpen || addModalOpen || editTarget !== null;
 
   const libraryRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    setDockApps(readStorage(STORAGE_KEY_DOCK, DEFAULT_DOCK));
-    setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, DEFAULT_LIBRARY));
-    setMounted(true);
+    const savedDock = localStorage.getItem(STORAGE_KEY_DOCK);
+    const savedLibrary = localStorage.getItem(STORAGE_KEY_LIBRARY);
+
+    if (savedDock && savedLibrary) {
+      // Returning user — restore from storage as before
+      setDockApps(readStorage(STORAGE_KEY_DOCK, []));
+      setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, []));
+      setMounted(true);
+    } else {
+      // First launch — derive defaults from apps.json so name/icon stay in sync
+      window.electronAPI
+        ?.getAvailableApps()
+        .then((available) => {
+          const byLink = new Map(available.map((a) => [a.link, a]));
+
+          if (!savedDock) {
+            const dock = DEFAULT_DOCK_LINKS.map((link) => byLink.get(link))
+              .filter((a): a is NonNullable<typeof a> => !!a)
+              .map(({ name, link, icon }) => ({ name, link, icon }));
+            setDockApps(dock);
+          } else {
+            setDockApps(readStorage(STORAGE_KEY_DOCK, []));
+          }
+
+          if (!savedLibrary) {
+            const library = DEFAULT_LIBRARY_LINKS.map((link) =>
+              byLink.get(link),
+            )
+              .filter((a): a is NonNullable<typeof a> => !!a)
+              .map(({ name, link, icon }) => ({ name, link, icon }));
+            setLibraryApps(library);
+          } else {
+            setLibraryApps(readStorage(STORAGE_KEY_LIBRARY, []));
+          }
+
+          setMounted(true);
+        })
+        .catch(() => {
+          // Fallback: empty if IPC fails (shouldn't happen in prod)
+          setDockApps([]);
+          setLibraryApps([]);
+          setMounted(true);
+        });
+    }
   }, []);
 
   useEffect(() => {
@@ -260,12 +313,41 @@ export default function App() {
     if (mounted) writeStorage(STORAGE_KEY_LIBRARY, libraryApps);
   }, [libraryApps, mounted]);
 
-  // ── Launch — via Electron IPC ──────────────────────────────────────────────
+  // ── Set of existing links (for picker to grey out already-added apps) ──────
+  const existingLinks = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of dockApps) s.add(a.link);
+    for (const a of libraryApps) s.add(a.link);
+    return s;
+  }, [dockApps, libraryApps]);
+
+  // ── Launch ─────────────────────────────────────────────────────────────────
   const handleLaunch = useCallback((_name: string, link: string) => {
     window.electronAPI?.openApp(link);
   }, []);
 
-  // ── Add ────────────────────────────────────────────────────────────────────
+  // ── Open "Add App" flow ────────────────────────────────────────────────────
+  const openAddFlow = useCallback(() => {
+    setPickerOpen(true);
+  }, []);
+
+  // ── Picker: user picks a preset app ───────────────────────────────────────
+  const handlePickPreset = useCallback(
+    (app: { name: string; link: string; icon?: string }) => {
+      setLibraryApps((prev) => [
+        ...prev,
+        { name: app.name, link: app.link, icon: app.icon },
+      ]);
+    },
+    [],
+  );
+
+  // ── Picker: user wants to add a custom app instead ────────────────────────
+  const handlePickerCustom = useCallback(() => {
+    setAddModalOpen(true);
+  }, []);
+
+  // ── Add custom app ─────────────────────────────────────────────────────────
   const handleAddApp = useCallback(
     (name: string, link: string, iconData?: string) => {
       setLibraryApps((prev) => [...prev, { name, link, iconData }]);
@@ -296,11 +378,13 @@ export default function App() {
       setEditTarget({ source, index }),
     [],
   );
+
   const closeModal = useCallback(() => {
     setAddModalOpen(false);
     setEditTarget(null);
   }, []);
-  const isModalOpen = addModalOpen || editTarget !== null;
+
+  const isAddOrEditOpen = addModalOpen || editTarget !== null;
 
   const editInitialValues: AppModalValues | undefined = editTarget
     ? editTarget.source === "dock"
@@ -405,7 +489,7 @@ export default function App() {
   // ── Keyboard nav ───────────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isModalOpen) return;
+      if (isAnyModalOpen) return;
       setFocus((prev) => {
         const { area, index } = prev;
         const dockMax = dockApps.length - 1;
@@ -443,7 +527,7 @@ export default function App() {
           case "Enter": {
             e.preventDefault();
             if (area === "library" && index === libraryApps.length) {
-              setAddModalOpen(true);
+              openAddFlow();
               return prev;
             }
             const entry =
@@ -458,14 +542,14 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dockApps, libraryApps, handleLaunch, isModalOpen]);
+  }, [dockApps, libraryApps, handleLaunch, isAnyModalOpen, openAddFlow]);
 
   const showDockPlaceholder =
     dockApps.length < DOCK_MAX_APPS && dragging?.from === "library";
   const addBtnFocused =
     focus.area === "library" && focus.index === libraryApps.length;
 
-  // ── Scrolling ───────────────────────────────────────────────────────────────────────
+  // ── Scrolling ─────────────────────────────────────────────────────────────
 
   const setLibraryRef = (name: string) => (el: HTMLDivElement | null) => {
     libraryRefs.current[name] = el;
@@ -473,13 +557,10 @@ export default function App() {
 
   useEffect(() => {
     if (focus.area !== "library") return;
-
     const entry = libraryApps[focus.index];
     if (!entry) return;
-
     const el = libraryRefs.current[entry.name];
     if (!el) return;
-
     el.scrollIntoView({
       behavior: "smooth",
       block: "center",
@@ -489,11 +570,7 @@ export default function App() {
 
   useEffect(() => {
     if (focus.area === "dock") {
-      const rootEl = document.getElementById("root");
-      rootEl?.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
+      document.getElementById("root")?.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [focus.area]);
 
@@ -632,7 +709,7 @@ export default function App() {
                   <AppIcon
                     name={entry.name}
                     link={entry.link}
-                    image={getIconPath(entry.name)}
+                    icon={entry.icon}
                     iconData={entry.iconData}
                     isInDock
                     focused={focus.area === "dock" && focus.index === i}
@@ -767,7 +844,7 @@ export default function App() {
                       ref={setLibraryRef(entry.name)}
                       name={entry.name}
                       link={entry.link}
-                      image={getIconPath(entry.name)}
+                      icon={entry.icon}
                       iconData={entry.iconData}
                       focused={focus.area === "library" && focus.index === i}
                       onLaunch={handleLaunch}
@@ -782,7 +859,7 @@ export default function App() {
                   <button
                     className="add-app-btn"
                     aria-label="Add new app"
-                    onClick={() => setAddModalOpen(true)}
+                    onClick={openAddFlow}
                     style={
                       addBtnFocused
                         ? {
@@ -808,8 +885,18 @@ export default function App() {
         </div>
       </div>
 
+      {/* Step 1: Picker */}
+      <AppPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePickPreset}
+        onCustom={handlePickerCustom}
+        existingLinks={existingLinks}
+      />
+
+      {/* Step 2: Custom add / edit */}
       <AddAppModal
-        open={isModalOpen}
+        open={isAddOrEditOpen}
         onClose={closeModal}
         onAdd={editTarget ? handleSaveEdit : handleAddApp}
         initialValues={editInitialValues}

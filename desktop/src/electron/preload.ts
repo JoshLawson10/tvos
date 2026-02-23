@@ -9,4 +9,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("view-state-change", (_event, isOpen) => callback(isOpen));
     return () => ipcRenderer.removeAllListeners("view-state-change");
   },
+
+  getAvailableApps: (): Promise<
+    { name: string; link: string; category?: string; icon?: string }[]
+  > => ipcRenderer.invoke("get-available-apps"),
 });

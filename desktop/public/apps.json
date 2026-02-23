@@ -1,0 +1,122 @@
+[
+  {
+    "name": "YouTube",
+    "link": "https://www.youtube.com",
+    "category": "Video",
+    "icon": "./icons/youtube.png"
+  },
+  {
+    "name": "Netflix",
+    "link": "https://www.netflix.com",
+    "category": "Video",
+    "icon": "./icons/netflix.png"
+  },
+  {
+    "name": "Disney+",
+    "link": "https://www.disneyplus.com",
+    "category": "Video",
+    "icon": "./icons/disney.png"
+  },
+  {
+    "name": "Stan",
+    "link": "https://www.stan.com.au",
+    "category": "Video",
+    "icon": "./icons/stan.png"
+  },
+  {
+    "name": "Binge",
+    "link": "https://binge.com.au",
+    "category": "Video",
+    "icon": "./icons/binge.png"
+  },
+  {
+    "name": "Paramount+",
+    "link": "https://www.paramountplus.com/au",
+    "category": "Video",
+    "icon": "./icons/paramount.png"
+  },
+  {
+    "name": "Apple TV",
+    "link": "https://tv.apple.com",
+    "category": "Video",
+    "icon": "./icons/tv.png"
+  },
+  {
+    "name": "Amazon Prime",
+    "link": "https://www.primevideo.com",
+    "category": "Video",
+    "icon": "./icons/prime.png"
+  },
+  {
+    "name": "7 Plus",
+    "link": "https://7plus.com.au",
+    "category": "Free TV",
+    "icon": "./icons/7plus.png"
+  },
+  {
+    "name": "9 Now",
+    "link": "https://9now.com.au",
+    "category": "Free TV",
+    "icon": "./icons/9now.png"
+  },
+  {
+    "name": "10 Play",
+    "link": "https://10play.com.au",
+    "category": "Free TV",
+    "icon": "./icons/10play.png"
+  },
+  {
+    "name": "ABC iview",
+    "link": "https://iview.abc.net.au",
+    "category": "Free TV",
+    "icon": "./icons/abciview.png"
+  },
+  {
+    "name": "SBS On Demand",
+    "link": "https://www.sbs.com.au/ondemand",
+    "category": "Free TV",
+    "icon": "./icons/sbs.png"
+  },
+  {
+    "name": "Kayo",
+    "link": "https://kayosports.com.au",
+    "category": "Sport",
+    "icon": "./icons/kayo.png"
+  },
+  {
+    "name": "ESPN",
+    "link": "https://www.espn.com",
+    "category": "Sport",
+    "icon": "./icons/espn.png"
+  },
+  {
+    "name": "Optus Sport",
+    "link": "https://sport.optus.com.au",
+    "category": "Sport",
+    "icon": "./icons/optussport.png"
+  },
+  {
+    "name": "Spotify",
+    "link": "https://open.spotify.com",
+    "category": "Music",
+    "icon": "./icons/spotify.png"
+  },
+  {
+    "name": "Apple Music",
+    "link": "https://music.apple.com",
+    "category": "Music",
+    "icon": "./icons/applemusic.png"
+  },
+  {
+    "name": "YouTube Music",
+    "link": "https://music.youtube.com",
+    "category": "Music",
+    "icon": "./icons/youtubemusic.png"
+  },
+  {
+    "name": "iCloud Photos",
+    "link": "https://www.icloud.com/photos",
+    "category": "Photos",
+    "icon": "./icons/photos.png"
+  }
+]

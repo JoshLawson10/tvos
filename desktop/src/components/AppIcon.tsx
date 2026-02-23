@@ -5,8 +5,8 @@ import type { ContextMenuItem } from "./ContextMenu";
 interface AppIconProps {
   name: string;
   link: string;
-  image?: string;
-  iconData?: string;
+  icon?: string; // bundled local path
+  iconData?: string; // user-uploaded base64, takes priority
   displayName?: boolean;
   isInDock?: boolean;
   focused?: boolean;
@@ -19,7 +19,7 @@ const AppIcon = forwardRef<HTMLDivElement, AppIconProps>(
     {
       name,
       link,
-      image,
+      icon,
       iconData,
       displayName = false,
       isInDock = false,
@@ -56,7 +56,7 @@ const AppIcon = forwardRef<HTMLDivElement, AppIconProps>(
     const closeMenu = useCallback(() => setMenuPos(null), []);
 
     const isActive = hovered || focused;
-    const src = iconData ?? image ?? "/icons/unknown.png";
+    const src = iconData ?? icon;
 
     return (
       <>
@@ -103,20 +103,37 @@ const AppIcon = forwardRef<HTMLDivElement, AppIconProps>(
                 : "0 8px 24px rgba(0,0,0,0.35)",
             }}
           >
-            <img
-              src={src}
-              alt={`${name} icon`}
-              draggable={false}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "/icons/unknown.png";
-              }}
-            />
+            {src ? (
+              <img
+                src={src}
+                alt={`${name} icon`}
+                draggable={false}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
+            ) : (
+              // Letter tile fallback when no icon is available
+              <div
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  background: `hsl(${[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360}, 35%, 25%)`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 32,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.6)",
+                  userSelect: "none",
+                }}
+              >
+                {name[0]}
+              </div>
+            )}
           </div>
 
           {!isInDock && (
